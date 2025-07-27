@@ -1,0 +1,6 @@
+{
+    "name": "radar-ofertas",
+    "image": "mcr.microsoft.com/devcontainers/python:0-3.10",
+    "features": {},
+    "postCreateCommand": "pip install -r requirements.txt"
+}
