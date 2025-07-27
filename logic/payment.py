@@ -25,4 +25,8 @@ def create_app(db_client: firestore.Client | None = None) -> Flask:
             )
         return jsonify({'status': 'ok'}), 200
 
+    @app.get('/healthz')
+    def healthz() -> tuple[str, int]:
+        return jsonify({'status': 'ok'}), 200
+
     return app

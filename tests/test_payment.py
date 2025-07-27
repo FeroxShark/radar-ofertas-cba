@@ -34,3 +34,12 @@ def test_webhook_updates_expiration():
     resp = client.post('/webhook/mp', json={'chat_id': '123'})
     assert resp.status_code == 200
     assert db.collection_obj.doc.data['exp_date'] > datetime.utcnow()
+
+
+def test_healthz_endpoint():
+    db = DummyDB()
+    app = payment.create_app(db)
+    client = app.test_client()
+    resp = client.get('/healthz')
+    assert resp.status_code == 200
+    assert resp.get_json() == {'status': 'ok'}
