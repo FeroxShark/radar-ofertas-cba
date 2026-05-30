@@ -1,28 +1,41 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from os import environ
+import logging
 import smtplib
 from email.message import EmailMessage
 
-from google.cloud import firestore
+import config
+
+logger = logging.getLogger(__name__)
+
+
+def _notify(failed: list[str]) -> None:
+    if not config.EMAIL_ALERT:
+        logger.warning("Scrapers atrasados sin EMAIL_ALERT configurado: %s", failed)
+        return
+    msg = EmailMessage()
+    msg['From'] = config.EMAIL_ALERT
+    msg['To'] = config.EMAIL_ALERT
+    msg['Subject'] = '[Radar] Scraper failure'
+    msg.set_content(', '.join(failed))
+    try:
+        with smtplib.SMTP(config.SMTP_HOST) as s:
+            s.send_message(msg)
+    except OSError as exc:
+        logger.error(
+            "No se pudo enviar la alerta por SMTP (%s): %s", config.SMTP_HOST, exc
+        )
 
 
 def run() -> None:
-    """Placeholder self check."""
-    db = firestore.Client()
-    now = datetime.utcnow()
-    threshold = now - timedelta(days=2)
-    failed = []
-    for scraper in db.collection('scraper_logs').stream():
-        last_ts = scraper.get('ts')
-        if last_ts and last_ts < threshold:
-            failed.append(scraper.id)
+    """Alerta si algún scraper no registra actividad reciente."""
+    db = config.get_db()
+    threshold = datetime.utcnow() - timedelta(days=config.STALE_DAYS)
+    failed = [
+        scraper.id
+        for scraper in db.collection('scraper_logs').stream()
+        if (last_ts := scraper.get('ts')) and last_ts < threshold
+    ]
     if failed:
-        msg = EmailMessage()
-        msg['From'] = environ.get('EMAIL_ALERT')
-        msg['To'] = environ.get('EMAIL_ALERT')
-        msg['Subject'] = '[Radar] Scraper failure'
-        msg.set_content(', '.join(failed))
-        with smtplib.SMTP('localhost') as s:
-            s.send_message(msg)
+        _notify(failed)

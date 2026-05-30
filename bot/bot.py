@@ -1,30 +1,50 @@
 from __future__ import annotations
 
 from datetime import datetime
+from functools import wraps
 import json
-from pathlib import Path
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-from google.cloud import firestore
 
+import config
 from logic.rank import Deal
 
+_db = None
 
-db = firestore.Client()
+
+def _get_db():
+    """Cliente Firestore perezoso (no exige credenciales al importar)."""
+    global _db
+    if _db is None:
+        _db = config.get_db()
+    return _db
 
 
 def _is_active(chat_id: int) -> bool:
-    doc = db.collection('subs').document(str(chat_id)).get()
+    doc = _get_db().collection('subs').document(str(chat_id)).get()
     if not doc.exists:
         return False
     exp = doc.get('exp_date')
     return exp and exp > datetime.utcnow()
 
 
+def require_active_subscription(handler):
+    """Responde 'Suscripción vencida' si el chat no tiene sub activa."""
+
+    @wraps(handler)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not _is_active(update.effective_chat.id):
+            await update.message.reply_text('Suscripción vencida')
+            return
+        await handler(update, context)
+
+    return wrapper
+
+
 def _load_today() -> list[Deal]:
     today = datetime.utcnow().date().isoformat()
-    path = Path('deals') / f'{today}.json'
+    path = config.DEALS_DIR / f'{today}.json'
     if not path.exists():
         return []
     return [Deal(**d) for d in json.loads(path.read_text())]
@@ -34,10 +54,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('Bienvenido a Radar Ofertas')
 
 
+@require_active_subscription
 async def hoy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_active(update.effective_chat.id):
-        await update.message.reply_text('Suscripción vencida')
-        return
     deals = _load_today()
     if not deals:
         await update.message.reply_text('Sin datos hoy')
@@ -46,10 +64,8 @@ async def hoy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('\n'.join(lines))
 
 
+@require_active_subscription
 async def producto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_active(update.effective_chat.id):
-        await update.message.reply_text('Suscripción vencida')
-        return
     query = ' '.join(context.args)
     deals = _load_today()
     query_lower = query.lower()

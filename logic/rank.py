@@ -5,8 +5,9 @@ from pathlib import Path
 import json
 from collections import defaultdict
 
-from google.cloud import firestore
 from pydantic import BaseModel
+
+import config
 
 
 class Deal(BaseModel):
@@ -20,8 +21,8 @@ class Deal(BaseModel):
     savings_pct: float
 
 
-def generate_top20(db: firestore.Client, output_dir: Path) -> list[Deal]:
-    since = datetime.utcnow() - timedelta(days=30)
+def generate_top20(db, output_dir: Path) -> list[Deal]:
+    since = datetime.utcnow() - timedelta(days=config.PRICE_WINDOW_DAYS)
     docs = db.collection('prices').where('ts', '>=', since).stream()
     items = []
     for doc in docs:
@@ -56,8 +57,8 @@ def generate_top20(db: firestore.Client, output_dir: Path) -> list[Deal]:
         )
 
     deals.sort(key=lambda d: d.savings_pct, reverse=True)
-    top20 = deals[:20]
+    top = deals[:config.TOP_N]
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / f"{datetime.utcnow().date()}.json"
-    path.write_text(json.dumps([d.dict() for d in top20], default=str, indent=2))
-    return top20
+    path.write_text(json.dumps([d.model_dump() for d in top], default=str, indent=2))
+    return top
