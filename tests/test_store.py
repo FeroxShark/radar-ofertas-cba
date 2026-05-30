@@ -1,36 +1,7 @@
 from datetime import datetime
 
-from logic.store import save_products
+from logic.store import append_prices, load_prices
 from scraper.base import Product
-
-
-class DummyCollection:
-    def __init__(self):
-        self.added = []
-        self.docs = {}
-
-    def add(self, data):
-        self.added.append(data)
-
-    def document(self, name):
-        doc = self.docs.setdefault(name, DummyDoc())
-        return doc
-
-
-class DummyDoc:
-    def __init__(self):
-        self.data = None
-
-    def set(self, data, merge=False):
-        self.data = data
-
-
-class DummyDB:
-    def __init__(self):
-        self.collections = {}
-
-    def collection(self, name):
-        return self.collections.setdefault(name, DummyCollection())
 
 
 def _product(name):
@@ -40,26 +11,23 @@ def _product(name):
         size_ml=1000,
         price_ars=100.0,
         url="u",
+        store="Día",
         ts=datetime.utcnow(),
     )
 
 
-def test_save_products_writes_prices_and_log():
-    db = DummyDB()
-    products = [_product("Leche"), _product("Cafe")]
+def test_load_prices_missing_returns_empty(tmp_path):
+    assert load_prices(tmp_path / "nope.json") == []
 
-    saved = save_products(db, products, retailer="carrefour")
 
+def test_append_prices_persists_and_accumulates(tmp_path):
+    path = tmp_path / "prices.json"
+
+    saved = append_prices([_product("Leche"), _product("Café")], path)
     assert saved == 2
-    assert len(db.collection("prices").added) == 2
-    assert db.collection("prices").added[0]["name"] == "Leche"
-    log = db.collection("scraper_logs").document("carrefour")
-    assert log.data["count"] == 2
-    assert isinstance(log.data["ts"], datetime)
 
-
-def test_save_products_without_retailer_skips_log():
-    db = DummyDB()
-    saved = save_products(db, [_product("Yerba")])
-    assert saved == 1
-    assert db.collection("scraper_logs").docs == {}
+    append_prices([_product("Yerba")], path)
+    history = load_prices(path)
+    assert len(history) == 3
+    assert {r["name"] for r in history} == {"Leche", "Café", "Yerba"}
+    assert history[0]["store"] == "Día"

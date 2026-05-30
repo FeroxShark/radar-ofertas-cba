@@ -15,6 +15,6 @@ PRODUCT_RE = re.compile(
     re.S,
 )
 
-scrape = build_scraper(URL, PRODUCT_RE)
+scrape = build_scraper(URL, PRODUCT_RE, store="Jumbo")
 
 __all__ = ["Product", "URL", "PRODUCT_RE", "scrape"]

@@ -14,10 +14,11 @@ class Product(BaseModel):
     size_ml: Optional[int] = None
     price_ars: float
     url: str
+    store: Optional[str] = None
     ts: datetime
 
 
-def parse(html: str, pattern: Pattern[str]) -> list[Product]:
+def parse(html: str, pattern: Pattern[str], store: str | None = None) -> list[Product]:
     """Extrae productos de `html` usando el `pattern` del retailer."""
     products: list[Product] = []
     for m in pattern.finditer(html):
@@ -30,6 +31,7 @@ def parse(html: str, pattern: Pattern[str]) -> list[Product]:
                 size_ml=size,
                 price_ars=price,
                 url=m.group("url"),
+                store=store,
                 ts=datetime.utcnow(),
             )
         )
@@ -37,13 +39,13 @@ def parse(html: str, pattern: Pattern[str]) -> list[Product]:
 
 
 def build_scraper(
-    url: str, pattern: Pattern[str]
+    url: str, pattern: Pattern[str], store: str | None = None
 ) -> Callable[[Optional[str]], list[Product]]:
     """Devuelve una función `scrape(html=None)` para un retailer concreto."""
 
     def scrape(html: str | None = None) -> list[Product]:
         if html is None:
             html = requests.get(url).text
-        return parse(html, pattern)
+        return parse(html, pattern, store)
 
     return scrape

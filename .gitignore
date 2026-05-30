@@ -1,5 +1,5 @@
 __pycache__/
 *.py[cod]
 .env
-deals/
+data/
 .pytest_cache/

@@ -4,55 +4,43 @@ import config
 
 
 def cmd_scrape() -> None:
-    from scraper import RETAILERS
-    from logic.store import save_products
+    """Scrapea todos los retailers y agrega los precios al historial local."""
+    from scraper import scrape_all
+    from logic.store import append_prices
 
-    db = config.get_db()
-    total = 0
-    for name, module in RETAILERS.items():
-        products = module.scrape()
-        total += save_products(db, products, retailer=name)
-    print(f"Guardados {total} productos")
+    saved = append_prices(scrape_all(), config.PRICES_FILE)
+    print(f"Guardados {saved} productos en {config.PRICES_FILE}")
 
 
-def cmd_rank() -> None:
-    from logic.rank import generate_top20
+def cmd_build() -> None:
+    """Genera la página web con el top de ofertas a partir del historial."""
+    from logic.store import load_prices
+    from logic.rank import generate_deals
+    from web.render import render_page
 
-    db = config.get_db()
-    top = generate_top20(db, config.DEALS_DIR)
-    print(f"Generado top con {len(top)} ofertas en {config.DEALS_DIR}")
-
-
-def cmd_bot(token: str | None) -> None:
-    from bot.bot import run as run_bot
-
-    token = token or config.TELEGRAM_TOKEN
-    if not token:
-        raise SystemExit("token required (--token o TELEGRAM_TOKEN)")
-    run_bot(token)
+    deals = generate_deals(load_prices(config.PRICES_FILE))
+    out = render_page(deals, config.WEB_DIR / "index.html")
+    print(f"Generadas {len(deals)} ofertas en {out}")
 
 
-def cmd_payment() -> None:
-    from logic.payment import create_app
+def cmd_demo() -> None:
+    """Carga datos de muestra y genera la web (sin scrapear nada real)."""
+    import json
 
-    create_app().run()
+    from logic.sample import sample_products
 
-
-def cmd_self_check() -> None:
-    from logic.self_check import run as self_check_run
-
-    self_check_run()
+    config.PRICES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    records = [p.model_dump(mode="json") for p in sample_products()]
+    config.PRICES_FILE.write_text(json.dumps(records, ensure_ascii=False, indent=2))
+    cmd_build()
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Radar Ofertas CLI")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("scrape", help="Scrapea retailers y guarda precios")
-    sub.add_parser("rank", help="Genera el top de ofertas del día")
-    bot_p = sub.add_parser("bot", help="Corre el bot de Telegram (polling)")
-    bot_p.add_argument("--token")
-    sub.add_parser("payment", help="Levanta el servidor de webhooks de pago")
-    sub.add_parser("self_check", help="Chequea salud de los scrapers")
+    sub.add_parser("build", help="Genera la web con el top de ofertas")
+    sub.add_parser("demo", help="Genera la web con datos de muestra")
     return parser
 
 
@@ -60,14 +48,10 @@ def main() -> None:
     args = build_parser().parse_args()
     if args.command == "scrape":
         cmd_scrape()
-    elif args.command == "rank":
-        cmd_rank()
-    elif args.command == "bot":
-        cmd_bot(args.token)
-    elif args.command == "payment":
-        cmd_payment()
-    elif args.command == "self_check":
-        cmd_self_check()
+    elif args.command == "build":
+        cmd_build()
+    elif args.command == "demo":
+        cmd_demo()
 
 
 if __name__ == "__main__":

@@ -1,26 +1,25 @@
-"""Persistencia de productos scrapeados en Firestore."""
+"""Almacenamiento local de precios scrapeados (JSON, sin servicios externos)."""
 from __future__ import annotations
 
-from datetime import datetime
+import json
+from pathlib import Path
 from typing import Iterable
 
 from scraper.base import Product
 
 
-def save_products(db, products: Iterable[Product], retailer: str | None = None) -> int:
-    """Guarda productos en la colección `prices` y registra el último `ts`.
+def load_prices(path: Path) -> list[dict]:
+    """Lee el historial de precios; devuelve lista vacía si no existe."""
+    if not path.exists():
+        return []
+    return json.loads(path.read_text())
 
-    `db` es un cliente Firestore (inyectable para tests). Devuelve la cantidad
-    de productos guardados. Actualiza `scraper_logs/<retailer>` con el momento
-    del scrapeo, que es lo que consume `self_check`.
-    """
+
+def append_prices(products: Iterable[Product], path: Path) -> int:
+    """Agrega productos al historial local. Devuelve cuántos se guardaron."""
     products = list(products)
-    prices = db.collection("prices")
-    for p in products:
-        prices.add(p.model_dump())
-
-    if retailer:
-        db.collection("scraper_logs").document(retailer).set(
-            {"ts": datetime.utcnow(), "count": len(products)}
-        )
+    history = load_prices(path)
+    history.extend(p.model_dump(mode="json") for p in products)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(history, ensure_ascii=False, indent=2))
     return len(products)
