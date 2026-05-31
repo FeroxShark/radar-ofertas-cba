@@ -50,10 +50,20 @@ def generate_deals(
     window_days = window_days if window_days is not None else config.PRICE_WINDOW_DAYS
     since = datetime.utcnow() - timedelta(days=window_days)
 
-    deals: list[Deal] = []
+    # El historial acumula snapshots: quedarse solo con el más reciente por
+    # producto (tienda + url) para no mostrar descuentos ya vencidos.
+    latest: dict[tuple, dict] = {}
     for r in records:
-        if _as_dt(r["ts"]) < since:
+        ts = _as_dt(r["ts"])
+        if ts < since:
             continue
+        key = (r.get("store"), r["url"])
+        current = latest.get(key)
+        if current is None or ts > _as_dt(current["ts"]):
+            latest[key] = r
+
+    deals: list[Deal] = []
+    for r in latest.values():
         savings = _savings(r["price_ars"], r.get("list_price"))
         if savings <= min_savings:
             continue

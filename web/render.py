@@ -91,6 +91,8 @@ const DEALS = {data};
 let store = "Todas", sort = "savings", q = "";
 
 const fmt = n => "$" + n.toLocaleString("es-AR", {{maximumFractionDigits: 0}});
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+  {{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}}[c]));
 const stores = ["Todas", ...[...new Set(DEALS.map(d => d.store).filter(Boolean))]];
 
 const chips = document.getElementById("chips");
@@ -117,14 +119,15 @@ function render() {{
     const s = Math.round(d.savings_pct);
     const unit = d.size_ml ? `<small> · ${{fmt(d.price_unit*1000)}}/L</small>` : "";
     const orig = (d.list_price && d.list_price > d.price_ars) ? `<s>${{fmt(d.list_price)}}</s>` : "";
+    const url = /^https?:\\/\\//.test(d.url || "") ? d.url : "#";
     return `<div class="card">
       <div class="save ${{s < 15 ? 'low' : ''}}">${{s}}%<small>OFF</small></div>
       <div class="info">
-        <p class="name">${{d.name}}</p>
-        <div class="meta">${{d.store ? `<span class="badge">${{d.store}}</span>`:""}}${{d.brand?`<span>${{d.brand}}</span>`:""}}</div>
+        <p class="name">${{esc(d.name)}}</p>
+        <div class="meta">${{d.store ? `<span class="badge">${{esc(d.store)}}</span>`:""}}${{d.brand?`<span>${{esc(d.brand)}}</span>`:""}}</div>
         <div class="price">${{fmt(d.price_ars)}} ${{orig}}${{unit}}</div>
       </div>
-      <a class="go" href="${{d.url}}" target="_blank" rel="noopener">Ver</a>
+      <a class="go" href="${{esc(url)}}" target="_blank" rel="noopener">Ver</a>
     </div>`;
   }}).join("");
 }}
@@ -138,6 +141,8 @@ render();
 def render_page(deals: list[Deal], output: Path) -> Path:
     """Escribe una página HTML autocontenida con las ofertas embebidas."""
     data = json.dumps([d.model_dump(mode="json") for d in deals], ensure_ascii=False)
+    # Evitar que un "</script>" o "<" dentro de los datos rompa el <script>.
+    data = data.replace("<", "\\u003c")
     html = _TEMPLATE.format(
         updated=datetime.utcnow().strftime("%d/%m/%Y %H:%M UTC"),
         count=len(deals),
