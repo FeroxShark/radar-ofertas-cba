@@ -62,6 +62,7 @@ _TEMPLATE = """<!DOCTYPE html>
   .badge {{ background: #1b2233; color: #9fb0c9; padding: 2px 8px; border-radius: 6px; }}
   .price {{ font-size: 17px; font-weight: 700; margin-top: 5px; }}
   .price small {{ font-size: 12px; font-weight: 500; color: #7d8aa0; }}
+  .price s {{ font-size: 13px; font-weight: 500; color: #5b6577; margin-left: 4px; }}
   .go {{
     flex: 0 0 auto; text-decoration: none; color: #93c5fd; font-size: 13px;
     border: 1px solid #243047; padding: 8px 12px; border-radius: 10px;
@@ -115,12 +116,13 @@ function render() {{
   list.innerHTML = rows.map(d => {{
     const s = Math.round(d.savings_pct);
     const unit = d.size_ml ? `<small> · ${{fmt(d.price_unit*1000)}}/L</small>` : "";
+    const orig = (d.list_price && d.list_price > d.price_ars) ? `<s>${{fmt(d.list_price)}}</s>` : "";
     return `<div class="card">
       <div class="save ${{s < 15 ? 'low' : ''}}">${{s}}%<small>OFF</small></div>
       <div class="info">
         <p class="name">${{d.name}}</p>
         <div class="meta">${{d.store ? `<span class="badge">${{d.store}}</span>`:""}}${{d.brand?`<span>${{d.brand}}</span>`:""}}</div>
-        <div class="price">${{fmt(d.price_ars)}}${{unit}}</div>
+        <div class="price">${{fmt(d.price_ars)}} ${{orig}}${{unit}}</div>
       </div>
       <a class="go" href="${{d.url}}" target="_blank" rel="noopener">Ver</a>
     </div>`;

@@ -1,7 +1,6 @@
-"""Ranking de ofertas a partir del historial local de precios."""
+"""Ranking de ofertas a partir del descuento real (precio vs precio de lista)."""
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import datetime, timedelta
 
 from pydantic import BaseModel
@@ -14,7 +13,8 @@ class Deal(BaseModel):
     brand: str | None = None
     size_ml: int | None = None
     price_ars: float
-    price_unit: float
+    list_price: float | None = None
+    price_unit: float | None = None
     url: str
     store: str | None = None
     ts: datetime
@@ -27,46 +27,48 @@ def _as_dt(value) -> datetime:
     return datetime.fromisoformat(str(value))
 
 
+def _savings(price: float, list_price: float | None) -> float:
+    """% de descuento del precio actual respecto del precio de lista."""
+    if list_price and list_price > price:
+        return (list_price - price) / list_price * 100
+    return 0.0
+
+
 def generate_deals(
     records: list[dict],
     top_n: int | None = None,
     window_days: int | None = None,
+    min_savings: float = 0.0,
 ) -> list[Deal]:
-    """Calcula el ahorro de cada producto vs su promedio histórico.
+    """Devuelve las mejores ofertas reales (precio < precio de lista).
 
-    `records` es una lista de dicts de precios (name, price_ars, size_ml, url,
-    store, ts). Devuelve las mejores `top_n` ofertas ordenadas por ahorro.
+    `records` es una lista de dicts de productos (name, price_ars, list_price,
+    size_ml, url, store, ts). Solo se incluyen productos con descuento mayor a
+    `min_savings`, ordenados por mayor descuento.
     """
     top_n = top_n if top_n is not None else config.TOP_N
     window_days = window_days if window_days is not None else config.PRICE_WINDOW_DAYS
     since = datetime.utcnow() - timedelta(days=window_days)
 
-    items = []
+    deals: list[Deal] = []
     for r in records:
         if _as_dt(r["ts"]) < since:
             continue
-        size = r.get("size_ml") or 1
-        items.append({**r, "price_unit": r["price_ars"] / size})
-
-    history = defaultdict(list)
-    for it in items:
-        history[it["name"]].append(it["price_unit"])
-    averages = {k: sum(v) / len(v) for k, v in history.items()}
-
-    deals: list[Deal] = []
-    for it in items:
-        mean = averages[it["name"]]
-        savings = (mean - it["price_unit"]) / mean * 100 if mean else 0.0
+        savings = _savings(r["price_ars"], r.get("list_price"))
+        if savings <= min_savings:
+            continue
+        size = r.get("size_ml")
         deals.append(
             Deal(
-                name=it["name"],
-                brand=it.get("brand"),
-                size_ml=it.get("size_ml"),
-                price_ars=it["price_ars"],
-                price_unit=it["price_unit"],
-                url=it["url"],
-                store=it.get("store"),
-                ts=_as_dt(it["ts"]),
+                name=r["name"],
+                brand=r.get("brand"),
+                size_ml=size,
+                price_ars=r["price_ars"],
+                list_price=r.get("list_price"),
+                price_unit=(r["price_ars"] / size) if size else None,
+                url=r["url"],
+                store=r.get("store"),
+                ts=_as_dt(r["ts"]),
                 savings_pct=savings,
             )
         )
