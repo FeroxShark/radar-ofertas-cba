@@ -1,12 +1,11 @@
+"""Ranking de ofertas a partir del descuento real (precio vs precio de lista)."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from pathlib import Path
-import json
-from collections import defaultdict
 
-from google.cloud import firestore
 from pydantic import BaseModel
+
+import config
 
 
 class Deal(BaseModel):
@@ -14,50 +13,75 @@ class Deal(BaseModel):
     brand: str | None = None
     size_ml: int | None = None
     price_ars: float
-    price_unit: float
+    list_price: float | None = None
+    price_unit: float | None = None
     url: str
+    store: str | None = None
     ts: datetime
     savings_pct: float
 
 
-def generate_top20(db: firestore.Client, output_dir: Path) -> list[Deal]:
-    since = datetime.utcnow() - timedelta(days=30)
-    docs = db.collection('prices').where('ts', '>=', since).stream()
-    items = []
-    for doc in docs:
-        data = doc.to_dict()
-        size = data.get('size_ml') or 1
-        unit = data['price_ars'] / size
-        items.append({**data, 'price_unit': unit})
+def _as_dt(value) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(str(value))
 
-    avg = defaultdict(list)
-    for it in items:
-        avg[it['name']].append(it['price_unit'])
 
-    averages = {k: sum(v) / len(v) for k, v in avg.items()}
+def _savings(price: float, list_price: float | None) -> float:
+    """% de descuento del precio actual respecto del precio de lista."""
+    if list_price and list_price > price:
+        return (list_price - price) / list_price * 100
+    return 0.0
+
+
+def generate_deals(
+    records: list[dict],
+    top_n: int | None = None,
+    window_days: int | None = None,
+    min_savings: float = 0.0,
+) -> list[Deal]:
+    """Devuelve las mejores ofertas reales (precio < precio de lista).
+
+    `records` es una lista de dicts de productos (name, price_ars, list_price,
+    size_ml, url, store, ts). Solo se incluyen productos con descuento mayor a
+    `min_savings`, ordenados por mayor descuento.
+    """
+    top_n = top_n if top_n is not None else config.TOP_N
+    window_days = window_days if window_days is not None else config.PRICE_WINDOW_DAYS
+    since = datetime.utcnow() - timedelta(days=window_days)
+
+    # El historial acumula snapshots: quedarse solo con el más reciente por
+    # producto (tienda + url) para no mostrar descuentos ya vencidos.
+    latest: dict[tuple, dict] = {}
+    for r in records:
+        ts = _as_dt(r["ts"])
+        if ts < since:
+            continue
+        key = (r.get("store"), r["url"])
+        current = latest.get(key)
+        if current is None or ts > _as_dt(current["ts"]):
+            latest[key] = r
 
     deals: list[Deal] = []
-    for it in items:
-        mean = averages[it['name']]
-        savings = 0.0
-        if mean:
-            savings = (mean - it['price_unit']) / mean * 100
+    for r in latest.values():
+        savings = _savings(r["price_ars"], r.get("list_price"))
+        if savings <= min_savings:
+            continue
+        size = r.get("size_ml")
         deals.append(
             Deal(
-                name=it['name'],
-                brand=it.get('brand'),
-                size_ml=it.get('size_ml'),
-                price_ars=it['price_ars'],
-                price_unit=it['price_unit'],
-                url=it['url'],
-                ts=it['ts'],
+                name=r["name"],
+                brand=r.get("brand"),
+                size_ml=size,
+                price_ars=r["price_ars"],
+                list_price=r.get("list_price"),
+                price_unit=(r["price_ars"] / size) if size else None,
+                url=r["url"],
+                store=r.get("store"),
+                ts=_as_dt(r["ts"]),
                 savings_pct=savings,
             )
         )
 
     deals.sort(key=lambda d: d.savings_pct, reverse=True)
-    top20 = deals[:20]
-    output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / f"{datetime.utcnow().date()}.json"
-    path.write_text(json.dumps([d.dict() for d in top20], default=str, indent=2))
-    return top20
+    return deals[:top_n]

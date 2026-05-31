@@ -1,0 +1,63 @@
+[
+  {
+    "productName": "Leche Entera La Serenísima 1L",
+    "brand": "La Serenísima",
+    "link": "https://www.carrefour.com.ar/leche-entera-1l/p",
+    "linkText": "leche-entera-1l",
+    "items": [
+      {
+        "name": "Leche Entera 1L",
+        "sellers": [
+          {
+            "sellerId": "1",
+            "commertialOffer": {
+              "Price": 980,
+              "ListPrice": 1290,
+              "IsAvailable": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "productName": "Leche Descremada 1L",
+    "brand": "Ilolay",
+    "linkText": "leche-descremada-1l",
+    "items": [
+      {
+        "name": "Leche Descremada 1L",
+        "sellers": [
+          {
+            "sellerId": "1",
+            "commertialOffer": {
+              "Price": 1100,
+              "ListPrice": 1100,
+              "IsAvailable": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "productName": "Leche sin stock",
+    "brand": "X",
+    "linkText": "leche-sin-stock",
+    "items": [
+      {
+        "name": "Leche sin stock",
+        "sellers": [
+          {
+            "sellerId": "1",
+            "commertialOffer": {
+              "Price": 800,
+              "ListPrice": 1000,
+              "IsAvailable": false
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
